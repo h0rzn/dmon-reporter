@@ -1,86 +1,75 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"time"
 
 	"github.com/h0rzn/dmon-reporter/store"
+	"golang.org/x/net/context"
 )
 
-// sendable() bool
-
-// send usual data set / data group
-// send() error
-
-// send all cached data
-// sendCached() error
-
-// PIPELINE
-// 1. Monitor [monitor.Metrics()]
-// 2. Store-Provider
-// 3. Publisher e
+const (
+	RETRY_INTERVAL = 5 * time.Second
+	SEND_TIMEOUT   = 2 * time.Second
+)
 
 type Publisher struct {
-	monitor         *Monitor
-	cache           store.SqliteProvider
-	retryTicker     time.Ticker
-	remoteReachable bool
+	monitor *Monitor
+	cache   store.SqliteProvider
+	// receive `true` if remote is reachable again
+	// `false` if remote started beeing unreachable
+	remoteAvailableC chan bool
+	// send `true` to start, `false` to stop retrying
+	controlRetryC chan bool
+	ctx           *context.Context
+	cancelFunc    context.CancelFunc
 }
 
-func (p *Publisher) Run() {
-	p.sendLoop(p.monitor.Out())
+func NewPublisher() *Publisher {
+	return &Publisher{
+		remoteAvailableC: make(chan bool),
+		controlRetryC:    make(chan bool),
+	}
+}
+
+func (p *Publisher) Run(in chan store.Data) {
+	p.cache.Init(map[string]string{})
+	go p.sendLoop(in)
+	p.handleRetries()
 }
 
 func (p *Publisher) send(data any) error {
 	_ = data
-	return nil
+	_, err := net.DialTimeout("tcp", "127.0.0.1:8080", SEND_TIMEOUT)
+	return err
 }
 
-func (p *Publisher) sendLoop(in <-chan any) {
-	for data := range in {
-		if p.remoteReachable {
-			err := p.send(data)
-			if err != nil && p.isSendErr(err) {
-				p.remoteReachable = false
-				go func() {
-					<-p.waitForRemote()
-					p.remoteReachable = true
-				}()
-				// push this dataset to cache
-			}
-		} else {
-			// push to cache
-		}
-	}
-
-	toCache := false
-	var awaitRemoteC chan bool
+func (p *Publisher) sendLoop(in <-chan store.Data) {
+	remoteAvailable := false
 	for {
 		select {
-		case data := <-in:
-			if !toCache {
-				if err := p.send(data); err != nil {
-					toCache = true
-					// send this dataset to cache
-					// p.cache.Push(data)
-					// start remote listener
-					awaitRemoteC = p.subscribeRemoteStatus()
+		case available := <-p.remoteAvailableC:
+			// remote is available again
+			if available {
+				if err := p.sendStaleData(); err != nil {
+					fmt.Println(err)
 				}
 			}
-		case remoteStatus := <-awaitRemoteC:
-			toCache = remoteStatus
-		default:
-		}
-	}
-
-}
-
-func (p *Publisher) process(in chan any) {
-	for set := range in {
-		if p.remoteReachable {
-			p.send(set)
-		} else {
-			// TODO use `set`
-			p.cache.Push(&store.Data{})
+			remoteAvailable = available
+		case data := <-in:
+			fmt.Println("in", data.ID())
+			if !remoteAvailable {
+				err := p.cache.Push(data)
+				if err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				if err := p.send(data); p.isSendErr(err) {
+					fmt.Println("sending to remote failed")
+					p.controlRetryC <- true
+				}
+			}
 		}
 	}
 }
@@ -89,24 +78,40 @@ func (p *Publisher) isSendErr(err error) bool {
 	return err != nil
 }
 
-func (p *Publisher) subscribeRemoteStatus() chan bool {
-	return make(chan bool)
+func (p *Publisher) handleRetries() {
+	ticker := time.NewTicker(RETRY_INTERVAL)
+	i := 0
+	for {
+		select {
+		case signal := <-p.controlRetryC:
+			if signal {
+				fmt.Printf("handle: start retry (sig: %t)\n", signal)
+				ticker.Reset(500 * time.Millisecond)
+			} else {
+				fmt.Printf("handle: stop retry (sig: %t)\n", signal)
+				ticker.Stop()
+			}
+		case <-ticker.C:
+			if i > 0 {
+				sig := p.retry()
+				fmt.Println("handle retries: send: ", sig)
+				p.remoteAvailableC <- sig
+				i = i + 1
+			}
+		}
+	}
 }
 
-func (p *Publisher) waitForRemote() chan bool {
-	remoteReady := make(chan bool)
-	go func() {
-		for range p.retryTicker.C {
-			// check if remote is reachable
-			remoteReady <- true
-		}
-	}()
-
-	return remoteReady
+func (p *Publisher) retry() bool {
+	fmt.Println("RETRY")
+	_, err := net.Dial("tcp", "127.0.0.1:8080")
+	//fmt.Println(err)
+	return err == nil
 }
 
 func (p *Publisher) sendStaleData() error {
 	// fetch stale data from cache
 	// send data
+	fmt.Println("sending stale data...")
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/h0rzn/dmon-reporter/store"
 )
 
 const containerPublishInterval = 5 * time.Second
@@ -184,12 +185,21 @@ func (m *Monitor) parse(statsChan chan types.StatsJSON) chan Metrics {
 	return out
 }
 
-func (m *Monitor) Metrics() chan Metrics {
-	return m.parse(m.fetch())
+func (m *Monitor) Metrics() chan store.Data {
+	metricsC := m.parse(m.fetch())
+	outC := make(chan store.Data)
+	go func() {
+		for metric := range metricsC {
+			_ = metric
+			set := store.NewData(metric.ID, time.Now(), metric)
+			outC <- *set
+		}
+	}()
+	return outC
 }
 
-func (m *Monitor) Out() chan interface{} {
-	return make(chan interface{})
+func (m *Monitor) Out() chan store.Data {
+	return m.Metrics()
 }
 
 func (m *Monitor) Stop() {

@@ -1,9 +1,5 @@
 package store
 
-import (
-	"time"
-)
-
 // implemented by respective cache provider
 type OfflineCache interface {
 	// Initialize Cache by preparing and
@@ -11,10 +7,10 @@ type OfflineCache interface {
 	Init(config map[string]string) error
 
 	// Push a dataset `CacheData` to the cache
-	Push(CacheData) error
+	Push(Data) error
 
 	// Get all stored data (for this session)
-	Fetch() ([]CacheData, error)
+	Fetch() ([]Data, error)
 
 	// Relase cache by dropping stored data
 	// Maybe get all stored data (for session?)
@@ -24,11 +20,6 @@ type OfflineCache interface {
 	// Useful for disconnecting and cleaning up
 	// to retrieve cached data later
 	Close()
-}
 
-type CacheData interface {
-	ID() string
-	When() time.Time
-	// Content() (json.RawMessage, error)
-	Content() any
+	Run(chan Data)
 }

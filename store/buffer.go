@@ -5,14 +5,13 @@ import (
 )
 
 type Buffer[T any] struct {
-	mut       *sync.Mutex
+	mut       sync.Mutex
 	data      []T
 	maxLength int
 }
 
 func NewBuffer[T any](maxLength int) *Buffer[T] {
 	return &Buffer[T]{
-		mut:       &sync.Mutex{},
 		data:      make([]T, 0),
 		maxLength: maxLength,
 	}
