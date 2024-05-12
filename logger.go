@@ -1,10 +1,6 @@
 package main
 
-import (
-	"fmt"
-	"path/filepath"
-	"runtime"
-)
+import ()
 
 // const (
 // 	LOG_CLEAR_SYMBOL = "\033[0m"
@@ -15,16 +11,15 @@ import (
 // )
 
 const (
-	LOG_MODE_INFO = "INFO"
-	LOG_MODE_ERROR = "ERROR"
+	LOG_MODE_INFO    = "INFO"
+	LOG_MODE_ERROR   = "ERROR"
 	LOG_MODE_WARNING = "WARN"
 )
 
-
-func log(msg string, mode string) {
-	if _, file, line, ok := runtime.Caller(0); ok {
-		fmt.Printf("[%s %s:%d] %s\n", mode, filepath.Base(file), line, msg)
-	} else {
-		fmt.Printf("[%s] %s\n", mode, msg)
-	}
-}
+// func log(msg string, mode string) {
+// 	if _, file, line, ok := runtime.Caller(0); ok {
+// 		fmt.Printf("[%s %s:%d] %s\n", mode, filepath.Base(file), line, msg)
+// 	} else {
+// 		fmt.Printf("[%s] %s\n", mode, msg)
+// 	}
+// }

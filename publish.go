@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/h0rzn/dmon-reporter/config"
 	"github.com/h0rzn/dmon-reporter/store"
 	"golang.org/x/net/context"
 )
@@ -16,7 +17,7 @@ const (
 
 type Publisher struct {
 	monitor *Monitor
-	cache   store.SqliteProvider
+	cache   store.OfflineCache
 	// receive `true` if remote is reachable again
 	// `false` if remote started beeing unreachable
 	remoteAvailableC chan bool
@@ -24,24 +25,39 @@ type Publisher struct {
 	controlRetryC chan bool
 	ctx           *context.Context
 	cancelFunc    context.CancelFunc
+	config        *config.Config
 }
 
-func NewPublisher() *Publisher {
+func NewPublisher(config *config.Config) *Publisher {
 	return &Publisher{
 		remoteAvailableC: make(chan bool),
 		controlRetryC:    make(chan bool),
+		config:           config,
 	}
 }
 
+func (p *Publisher) Init() error {
+	switch p.config.Cache.Provider {
+	case "sqlite":
+		p.cache = &store.SqliteProvider{}
+	}
+
+	err := p.cache.Init(p.config)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *Publisher) Run(in chan store.Data) {
-	p.cache.Init(map[string]string{})
 	go p.sendLoop(in)
 	p.handleRetries()
 }
 
 func (p *Publisher) send(data any) error {
+	log.Debug("send")
 	_ = data
-	_, err := net.DialTimeout("tcp", "127.0.0.1:8080", SEND_TIMEOUT)
+	_, err := net.DialTimeout(p.config.Master.Protocol, p.config.Master.Addr, time.Duration(p.config.Master.Send_Timeout))
 	return err
 }
 
@@ -58,7 +74,6 @@ func (p *Publisher) sendLoop(in <-chan store.Data) {
 			}
 			remoteAvailable = available
 		case data := <-in:
-			fmt.Println("in", data.ID())
 			if !remoteAvailable {
 				err := p.cache.Push(data)
 				if err != nil {
@@ -66,7 +81,6 @@ func (p *Publisher) sendLoop(in <-chan store.Data) {
 				}
 			} else {
 				if err := p.send(data); p.isSendErr(err) {
-					fmt.Println("sending to remote failed")
 					p.controlRetryC <- true
 				}
 			}
@@ -85,33 +99,37 @@ func (p *Publisher) handleRetries() {
 		select {
 		case signal := <-p.controlRetryC:
 			if signal {
-				fmt.Printf("handle: start retry (sig: %t)\n", signal)
 				ticker.Reset(500 * time.Millisecond)
 			} else {
-				fmt.Printf("handle: stop retry (sig: %t)\n", signal)
 				ticker.Stop()
 			}
 		case <-ticker.C:
 			if i > 0 {
 				sig := p.retry()
-				fmt.Println("handle retries: send: ", sig)
 				p.remoteAvailableC <- sig
-				i = i + 1
 			}
+			// skip first tick
+			i = i + 1
 		}
 	}
 }
 
 func (p *Publisher) retry() bool {
-	fmt.Println("RETRY")
-	_, err := net.Dial("tcp", "127.0.0.1:8080")
-	//fmt.Println(err)
+	log.Debug("retrying")
+	_, err := net.Dial(p.config.Master.Protocol, p.config.Master.Addr)
 	return err == nil
 }
 
 func (p *Publisher) sendStaleData() error {
-	// fetch stale data from cache
-	// send data
-	fmt.Println("sending stale data...")
+	stale, err := p.cache.Fetch()
+	log.Info("sending stale data (", len(stale), ")")
+	for _, set := range stale {
+		fmt.Println(set.ID(), set.When())
+	}
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

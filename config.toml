@@ -1,0 +1,10 @@
+[Cache]
+	provider = "sqlite"
+	dbPath = "cache.db"
+
+[Master]
+	protocol = "tcp"
+	addr = "127.0.0.1:8080"
+	send_timeout = 5
+	retry_interval = 5
+	

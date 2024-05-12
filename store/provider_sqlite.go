@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/h0rzn/dmon-reporter/config"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
 )
+
+var log = logrus.New()
 
 const defaultPath = "./store/data.db"
 const (
@@ -23,22 +27,18 @@ type SqliteProvider struct {
 	mode   int
 }
 
-func (p *SqliteProvider) Init(config map[string]string) error {
+func (p *SqliteProvider) Init(config *config.Config) error {
+	log.SetLevel(logrus.DebugLevel)
+
 	p.buffer = NewBuffer[Data](5)
 
-	var dbPath string
-	if path, ok := config["db_path"]; ok {
-		dbPath = path
-	} else {
-		dbPath = defaultPath
-	}
-	_, err := os.OpenFile(dbPath, os.O_CREATE|os.O_WRONLY, 0644)
+	_, err := os.OpenFile(config.Cache.DbPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return errors.New(fmt.Sprintf("failed to create database file @ %s", dbPath))
+		return errors.New(fmt.Sprintf("failed to create database file @ %s", config.Cache.DbPath))
 	}
 
-	fmt.Println("using db:", dbPath)
-	db, err := sql.Open("sqlite3", dbPath)
+	log.Info("using db file:", config.Cache.DbPath)
+	db, err := sql.Open("sqlite3", config.Cache.DbPath)
 	if err != nil {
 		return err
 	}
@@ -92,8 +92,6 @@ func (p *SqliteProvider) WriteSingle(data Data) error {
 }
 
 func (p *SqliteProvider) Write(sets ...Data) error {
-	fmt.Println("Write", len(sets))
-
 	var query bytes.Buffer
 	values := []interface{}{}
 	query.WriteString("INSERT INTO data(dataset, time) VALUES ")
@@ -114,7 +112,7 @@ func (p *SqliteProvider) Write(sets ...Data) error {
 		return err
 	}
 	rowsAffected, _ := result.RowsAffected()
-	fmt.Println("[CACHE] write -> rows affected: ", rowsAffected)
+	log.Debug("writing to cache, rows affected: ", rowsAffected)
 	return nil
 }
 

@@ -1,6 +1,12 @@
 package main
 
+import "github.com/sirupsen/logrus"
+
+var log = logrus.New()
+
 func main() {
+	log.SetLevel(logrus.DebugLevel)
+
 	app := NewApp()
 	app.Run()
 }

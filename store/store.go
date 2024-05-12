@@ -1,10 +1,12 @@
 package store
 
+import "github.com/h0rzn/dmon-reporter/config"
+
 // implemented by respective cache provider
 type OfflineCache interface {
 	// Initialize Cache by preparing and
 	// connecting to the cache provider
-	Init(config map[string]string) error
+	Init(*config.Config) error
 
 	// Push a dataset `CacheData` to the cache
 	Push(Data) error
@@ -20,6 +22,4 @@ type OfflineCache interface {
 	// Useful for disconnecting and cleaning up
 	// to retrieve cached data later
 	Close()
-
-	Run(chan Data)
 }

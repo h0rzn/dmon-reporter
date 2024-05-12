@@ -74,7 +74,7 @@ func (m *Monitor) IndexContainers() error {
 
 func (m *Monitor) LinkContainer(container types.Container) {
 	if _, exists := m.containers[container.ID]; exists {
-		log(fmt.Sprintf("container %s already linked\n", container.ID), LOG_MODE_WARNING)
+		log.Warn(fmt.Sprintf("container %s already linked\n", container.ID))
 		return
 	}
 
@@ -82,12 +82,12 @@ func (m *Monitor) LinkContainer(container types.Container) {
 	wrappedContainer := NewContainer(container.ID, m.dockerClient, m.clientCtx, containerPublishInterval)
 	m.containers[container.ID] = wrappedContainer
 	m.mut.Unlock()
-	log(fmt.Sprintf("LINKED %s", container.ID), LOG_MODE_INFO)
+	log.Info(fmt.Sprintf("LINKED %s", container.ID))
 }
 
 func (m *Monitor) LinkContainerByID(id string) {
 	if _, exists := m.containers[id]; exists {
-		log(fmt.Sprintf("container %s already linked\n", id), LOG_MODE_WARNING)
+		log.Warn(fmt.Sprintf("container %s already linked\n", id))
 		return
 	}
 
@@ -133,7 +133,7 @@ func (m *Monitor) HandleContainerEvents() {
 					// fmt.Println(event.Action)
 				}
 			case err := <-errChan:
-				log(fmt.Sprintf("Failed to read events: %s", err.Error()), LOG_MODE_ERROR)
+				log.Error(fmt.Sprintf("Failed to read events: %s", err.Error()))
 			}
 		}
 	}()
@@ -210,6 +210,6 @@ func (m *Monitor) Stop() {
 		container.StopInGroup(containerStopGroup)
 	}
 	containerStopGroup.Wait()
-	log("Stopped all containers", LOG_MODE_INFO)
+	log.Info("Stopped all containers")
 	m.mut.Unlock()
 }

@@ -75,10 +75,10 @@ func (c *Container) Stop() {
 	case <-c.prunableSig:
 		break
 	case <-time.After(5 * time.Second):
-		log(fmt.Sprintf("Stop timeout: %s", c.ID), LOG_MODE_WARNING)
+		log.Debug(fmt.Sprintf("Stop timeout: %s", c.ID))
 	}
 	close(c.prunableSig)
-	log(fmt.Sprintf("Stopped: %s", c.ID), LOG_MODE_INFO)
+	log.Info(fmt.Sprintf("Stopped: %s", c.ID))
 }
 
 func (c *Container) StopInGroup(wg *sync.WaitGroup) {
