@@ -10,11 +10,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
-	RETRY_INTERVAL = 5 * time.Second
-	SEND_TIMEOUT   = 2 * time.Second
-)
-
 type Publisher struct {
 	monitor *Monitor
 	cache   store.OfflineCache
@@ -57,7 +52,8 @@ func (p *Publisher) Run(in chan store.Data) {
 func (p *Publisher) send(data any) error {
 	log.Debug("send")
 	_ = data
-	_, err := net.DialTimeout(p.config.Master.Protocol, p.config.Master.Addr, time.Duration(p.config.Master.Send_Timeout))
+	timeout := time.Duration(p.config.Master.Send_Timeout) * time.Second
+	_, err := net.DialTimeout(p.config.Master.Protocol, p.config.Master.Addr, timeout)
 	return err
 }
 
@@ -68,7 +64,10 @@ func (p *Publisher) sendLoop(in <-chan store.Data) {
 		case available := <-p.remoteAvailableC:
 			// remote is available again
 			if available {
-				if err := p.sendStaleData(); err != nil {
+				log.Info("remote is back up ", time.Now())
+				if err := p.sendStaleData(); err == nil {
+					p.controlRetryC <- false
+				} else {
 					fmt.Println(err)
 				}
 			}
@@ -82,6 +81,7 @@ func (p *Publisher) sendLoop(in <-chan store.Data) {
 			} else {
 				if err := p.send(data); p.isSendErr(err) {
 					p.controlRetryC <- true
+					remoteAvailable = false
 				}
 			}
 		}
@@ -93,7 +93,7 @@ func (p *Publisher) isSendErr(err error) bool {
 }
 
 func (p *Publisher) handleRetries() {
-	ticker := time.NewTicker(RETRY_INTERVAL)
+	ticker := time.NewTicker(time.Duration(p.config.Master.Retry_Interval) * time.Second)
 	i := 0
 	for {
 		select {
@@ -122,11 +122,11 @@ func (p *Publisher) retry() bool {
 
 func (p *Publisher) sendStaleData() error {
 	stale, err := p.cache.Fetch()
-	log.Info("sending stale data (", len(stale), ")")
-	for _, set := range stale {
-		fmt.Println(set.ID(), set.When())
-	}
-
+	// log.Info("sending stale data (", len(stale), ")")
+	// for _, set := range stale {
+	// fmt.Println(set.ID(), set.When())
+	// }
+	_ = stale
 	if err != nil {
 		return err
 	}

@@ -41,6 +41,11 @@ func (a *App) Run() {
 	metricsC := a.monitor.Out()
 
 	a.publisher = NewPublisher(cfg)
+	err = a.publisher.Init()
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
 	a.publisher.Run(metricsC)
 
 }
